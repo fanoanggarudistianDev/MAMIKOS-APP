@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Kamar;
-use App\Models\Penghuni;
-use App\Models\Pembayaran;
 use App\Models\Pengaduan;
+use App\Models\Pembayaran;
+use App\Models\Penghuni;
+use App\Models\Setting;
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class KosController extends Controller
 {
     public function dashboard()
     {
-        $user = auth()->user();
+        /** @var \App\Models\User|null $user */
+        $user = Auth::user();
 
         if ($user && ($user->role === 'admin' || $user->email === 'admin@kos.com')) {
             $total_kamar = Kamar::count();
@@ -21,8 +25,8 @@ class KosController extends Controller
             $total_kamar_tersedia = Kamar::where('status', 'Tersedia')->count();
             $total_penghuni = Penghuni::count();
             $total_pendapatan = Pembayaran::sum('jumlah_bayar');
-            $pendapatan_bulan_ini = Pembayaran::whereMonth('tanggal_bayar', now()->month)
-                ->whereYear('tanggal_bayar', now()->year)
+            $pendapatan_bulan_ini = Pembayaran::whereMonth('tanggal_bayar', Carbon::now()->month)
+                ->whereYear('tanggal_bayar', Carbon::now()->year)
                 ->sum('jumlah_bayar');
             $total_pengaduan = Pengaduan::where('status_penanganan', 'Proses')->count();
 
@@ -39,8 +43,8 @@ class KosController extends Controller
 
         // Default: penghuni dashboard (show linked penghuni data when available)
         $penghuni = null;
-        if ($user) {
-            $penghuni = $user->penghuni()->with('kamar', 'pembayarans')->first();
+        if ($user && $user->penghuni_id) {
+            $penghuni = Penghuni::with('kamar', 'pembayarans')->find($user->penghuni_id);
         }
 
         return view('dashboard_penghuni', ['user' => $user, 'penghuni' => $penghuni]);
@@ -153,12 +157,70 @@ class KosController extends Controller
 
     public function indexReports()
     {
-        return view('reports.index');
+        $total_kamar = Kamar::count();
+        $total_kamar_terisi = Kamar::where('status', 'Terisi')->count();
+        $total_kamar_tersedia = Kamar::where('status', 'Tersedia')->count();
+        $total_penghuni = Penghuni::count();
+        $total_pendapatan = Pembayaran::sum('jumlah_bayar');
+        $pendapatan_bulan_ini = Pembayaran::whereMonth('tanggal_bayar', Carbon::now()->month)
+            ->whereYear('tanggal_bayar', Carbon::now()->year)
+            ->sum('jumlah_bayar');
+        $total_pengaduan = Pengaduan::where('status_penanganan', 'Proses')->count();
+        
+        $kamars = Kamar::all();
+        $pembayarans_bulan_ini = Pembayaran::whereMonth('tanggal_bayar', Carbon::now()->month)
+            ->whereYear('tanggal_bayar', Carbon::now()->year)
+            ->with('penghuni.kamar')
+            ->orderBy('tanggal_bayar', 'desc')
+            ->get();
+        $pengaduans_aktif = Pengaduan::where('status_penanganan', 'Proses')
+            ->with('penghuni.kamar')
+            ->orderBy('tanggal_pengaduan', 'desc')
+            ->get();
+        
+        return view('reports.index', compact(
+            'total_kamar',
+            'total_kamar_terisi',
+            'total_kamar_tersedia',
+            'total_penghuni',
+            'total_pendapatan',
+            'pendapatan_bulan_ini',
+            'total_pengaduan',
+            'kamars',
+            'pembayarans_bulan_ini',
+            'pengaduans_aktif'
+        ));
     }
 
     public function indexSettings()
     {
-        return view('settings.index');
+        $setting = Setting::firstOrCreate([], [
+            'nama_kos' => 'Kos Kami',
+            'tarif_default' => 0,
+            'tgl_jatuh_tempo_pembayaran' => 1,
+            'status' => 'aktif'
+        ]);
+
+        return view('settings.index', compact('setting'));
+    }
+
+    public function updateSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'nama_kos' => 'required|string|max:255',
+            'alamat_kos' => 'nullable|string',
+            'telepon_kos' => 'nullable|string|max:20',
+            'email_notifikasi' => 'nullable|email',
+            'tarif_default' => 'required|integer|min:0',
+            'deskripsi_kos' => 'nullable|string',
+            'tgl_jatuh_tempo_pembayaran' => 'required|integer|min:1|max:31',
+            'policy_kos' => 'nullable|string',
+            'status' => 'required|in:aktif,nonaktif',
+        ]);
+
+        Setting::firstOrFail()->update($validated);
+
+        return redirect()->back()->with('success', 'Pengaturan berhasil diperbarui!');
     }
 
     public function storePengaduan(Request $request)

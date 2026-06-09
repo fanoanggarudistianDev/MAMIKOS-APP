@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Pengaduan extends Model
 {
@@ -11,7 +12,7 @@ class Pengaduan extends Model
 
     protected $fillable = ['penghuni_id', 'deskripsi_keluhan', 'tanggal_pengaduan', 'status_penanganan'];
 
-    public function penghuni()
+    public function penghuni(): BelongsTo
     {
         return $this->belongsTo(Penghuni::class);
     }

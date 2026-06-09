@@ -41,5 +41,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/users', [KosController::class, 'indexUsers']);
         Route::get('/reports', [KosController::class, 'indexReports']);
         Route::get('/settings', [KosController::class, 'indexSettings']);
+        Route::post('/settings', [KosController::class, 'updateSettings'])->name('settings.update');
     });
 });
